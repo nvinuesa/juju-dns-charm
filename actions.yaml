@@ -1,0 +1,11 @@
+set-password:
+  description: Set/change the credentials for the Juju controller.
+    This is only required once, it is OK to do it only for the first
+    integrated controller.
+  params:
+    username:
+      type: string
+      description: The controller username, default value 'admin'.
+    password:
+      type: string
+      description: The controller password.

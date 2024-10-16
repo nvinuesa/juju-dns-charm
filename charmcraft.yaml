@@ -1,0 +1,30 @@
+name: juju-dns
+type: charm
+title: Juju internal DNS
+summary: Provides DNS resolution for deployed Juju units, appliactions and machines.
+description: |
+  This charm provides DNS resolution for deployed Juju units, appliactions and machines.
+bases:
+  - build-on:
+      - name: ubuntu
+        channel: "22.04"
+    run-on:
+      - name: ubuntu
+        channel: "22.04"
+
+config:
+  options:
+    port:
+      description: |
+        The port on which juju-dns (CoreDNS) is listening.
+      default: 1053
+      type: int
+    ttl:
+      description: |
+        The TTL for DNS records. Default 60 seconds.
+      default: "60"
+      type: string
+
+requires:
+  website:
+    interface: http
