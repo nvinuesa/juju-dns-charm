@@ -1,6 +1,8 @@
 ttl: {{ ttl }}
 controllers:
-  {{ controller }}:
-    address: {{ address }}
-    username: {{ username }}
-    password: {{ password }}
+{% for key, val in controllers.items() %}
+  {{ key }}:
+    address: {{ val.address }}
+    username: {{ val.username }}
+    password: {{ val.password }}
+{% endfor %}

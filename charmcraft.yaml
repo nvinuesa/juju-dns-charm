@@ -25,6 +25,12 @@ config:
       default: "60"
       type: string
 
-requires:
-  controller:
-    interface: http
+resources:
+  controllers:
+    type: file
+    filename: controllers.yaml
+    description: Local controllers.yaml file for the juju client.
+  accounts:
+    type: file
+    filename: accounts.yaml
+    description: Local accounts.yaml file for the juju client. Needed to authenticate with the Juju controller.
