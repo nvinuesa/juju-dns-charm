@@ -26,5 +26,5 @@ config:
       type: string
 
 requires:
-  website:
+  controller:
     interface: http

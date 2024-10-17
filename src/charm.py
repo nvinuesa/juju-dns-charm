@@ -6,13 +6,16 @@ from config import Config
 import logging
 from jinja2 import Template
 import subprocess
-from constants import COREFILE_PATH, JUJU_DNS_SNAP_NAME, SNAP_PACKAGES,JUJU_DNS_PLUGIN_CONFIG_PATH
+from constants import CONTROLLER_RELATION, COREFILE_PATH, JUJU_DNS_SNAP_NAME, SNAP_PACKAGES,JUJU_DNS_PLUGIN_CONFIG_PATH
 import os
 import pwd
 import ops
 from ops.framework import StoredState
 from ops.charm import (
     ActionEvent,
+    RelationDepartedEvent,
+    RelationEvent,
+    RelationJoinedEvent,
 )
 import platform
 from charms.operator_libs_linux.v2 import snap
@@ -28,8 +31,10 @@ class JujuDnsCharm(ops.CharmBase):
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.set_password_action, self._on_set_password)
-        self._stored.set_default(port=ops.Port('udp', 1053),ttl="60",username="",password="")
-        self.unit.set_ports(self._stored.port)
+        framework.observe(self.on[CONTROLLER_RELATION].relation_joined, self._on_relation_joined)
+        self._stored.set_default(port=1053,ttl="60",username="",password="",address="",controller="")
+        port=ops.Port('udp', 1053)
+        self.unit.set_ports(port)
 
     def _on_start(self, event: ops.StartEvent):
         """Handle start event."""
@@ -70,9 +75,10 @@ class JujuDnsCharm(ops.CharmBase):
         """Handle config changed event."""
 
         # First open the port if it changed:
-        if self.config["port"] != self._stored.port.port:
+        if self.config["port"] != self._stored.port:
             self._stored.port = ops.Port('udp',self.config["port"])
-            self.unit.set_ports(self._stored.port)
+            port=ops.Port('udp', self._stored.port)
+            self.unit.set_ports(port)
             # Dump Corefile with the updated port
             self._render_corefile()
 
@@ -102,9 +108,10 @@ class JujuDnsCharm(ops.CharmBase):
             template = Template(file.read())
 
         config = template.render(
-            controller="c",
-            address="10.165.241.216:17070",
-            username=self._stored.username, password=self._stored.password,
+            controller=self._stored.controller,
+            address=self._stored.address,
+            username=self._stored.username,
+            password=self._stored.password,
             ttl=self._stored.ttl
         )
         logger.info("Rendered config:\n%s", config)
@@ -140,6 +147,43 @@ class JujuDnsCharm(ops.CharmBase):
         juju_dns_snap = cache[JUJU_DNS_SNAP_NAME]
 
         juju_dns_snap.restart()
+
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
+        """Add peer to replica set.
+
+        Args:
+            event: The triggering relation joined event.
+        """
+
+        self._on_relation_handler(event)
+
+        # self._update_related_hosts(event)
+
+    def _on_relation_handler(self, event: RelationEvent) -> None:
+        """Update the controller address when joining the controller relation"""
+
+        for unit in event.relation.units:
+            if unit.app == "juju-dns":
+                # This is a peer unit
+                continue
+            if "port" in event.relation.data[unit]:
+                # We have found the leader unit (only leader unit should have
+                # the port in the relation data), so use this address and break.
+                self._stored.address = event.relation.data[unit]["private-address"]+":"+event.relation.data[unit]["port"]
+                break
+            # If no port is specified, use the default port.
+            self._stored.address = event.relation.data[unit]["private-address"]+":17070"
+
+        # Now that we have the address, also add the controller (model, because
+        # this charm is supposed to be deployed on the controller model) name
+        # to the config and render the file.
+        self._stored.controller = os.getenv["JUJU_CONTROLLER"]
+        self._render_config()
+
+
+    def _update_related_hosts(self, event) -> None:
+        # app relations should be made aware of the new set of hosts
+        return
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(JujuDnsCharm)  # type: ignore
