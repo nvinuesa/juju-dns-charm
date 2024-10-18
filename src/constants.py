@@ -8,4 +8,3 @@ SNAP_PACKAGES = [
         {"revision": {"aarch64": "5", "x86_64": "6"}},
     )
 ]
-CONTROLLER_RELATION="controller"

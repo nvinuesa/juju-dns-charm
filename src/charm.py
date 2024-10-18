@@ -2,12 +2,11 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from config import Config
 import logging
 from jinja2 import Template
 import yaml
 import subprocess
-from constants import CONTROLLER_RELATION, COREFILE_PATH, JUJU_DNS_SNAP_NAME, SNAP_PACKAGES,JUJU_DNS_PLUGIN_CONFIG_PATH
+from constants import COREFILE_PATH, JUJU_DNS_SNAP_NAME, SNAP_PACKAGES,JUJU_DNS_PLUGIN_CONFIG_PATH
 import os
 import pwd
 import ops
