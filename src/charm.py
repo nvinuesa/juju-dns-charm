@@ -31,6 +31,7 @@ class JujuDnsCharm(ops.CharmBase):
         framework.observe(self.on.start, self._on_start)
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.on["controller"].relation_joined, self._on_relation_joined)
         self._stored.set_default(port=1053, ttl="60")
         port=ops.Port('udp', 1053)
         self.unit.set_ports(port)
@@ -43,29 +44,6 @@ class JujuDnsCharm(ops.CharmBase):
     def _on_install(self, event: ops.InstallEvent):
         """Handle install event."""
         self.unit.status = ops.MaintenanceStatus("Installing juju-dns snap")
-
-        # Load controllers and accounts resources.
-        try:
-            accounts_path = self.model.resources.fetch("accounts")
-        except Exception as e:
-            logger.error("retrieving accounts.yaml file path from resources, reason: %s", str(e))
-            raise
-        try:
-            controllers_path = self.model.resources.fetch("controllers")
-        except Exception as e:
-            logger.error("retrieving controllers.yaml file path from resources, reason: %s", str(e))
-            raise
-
-        with open(accounts_path, "r") as file:
-            accounts_contents = yaml.safe_load(file)
-        with open(controllers_path, "r") as file:
-            controllers_contents = yaml.safe_load(file)
-
-        for controller_name in controllers_contents["controllers"]:
-            self.controllers[controller_name]={}
-            self.controllers[controller_name]["address"] = controllers_contents["controllers"][controller_name]["api-endpoints"][0]
-            self.controllers[controller_name]["username"] = accounts_contents["controllers"][controller_name]["user"]
-            self.controllers[controller_name]["password"] = accounts_contents["controllers"][controller_name]["password"]
 
         for snap_name, snap_version in SNAP_PACKAGES:
             try:
@@ -91,10 +69,6 @@ class JujuDnsCharm(ops.CharmBase):
                     "An exception occurred when installing %s. Reason: %s", snap_name, str(e)
                 )
                 raise
-
-        logger.info("controllers %r", self.controllers)
-        self._render_config()
-
         self.unit.status = ops.ActiveStatus("Ready")
 
     def _on_config_changed(self, event: ops.ConfigChangedEvent):
@@ -110,10 +84,28 @@ class JujuDnsCharm(ops.CharmBase):
 
         # Update the ttl of the DNS records:
         if self.config["ttl"] != self._stored.ttl:
-            logger.info("config updated with new ttl value '%s'", self.config["ttl"])
             self._stored.ttl = self.config["ttl"]
             # Dump config yaml.
             self._render_config()
+
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
+        """Update the controller address when joining the controller relation"""
+        for unit in event.relation.units:
+            if unit.app == "juju-dns":
+                # This is a peer unit
+                continue
+            controller_name = event.relation.data[unit]["controller_name"]
+            self.controllers[controller_name]={}
+            self.controllers[controller_name]["address"] = event.relation.data[unit]["address"]
+            self.controllers[controller_name]["username"] = event.relation.data[unit]["username"]
+            self.controllers[controller_name]["password"] = event.relation.data[unit]["password"]
+        # Now that we have the address, also add the controller (model, because
+        # this charm is supposed to be deployed on the controller model) name
+        # to the config and render the file.
+        self._render_config()
+
+    def _on_relation_handler(self, event: RelationEvent) -> None:
+        logger.info("*** relation handler:\n%s",event)
 
     def _render_config(self) -> None:
         """Render the juju-dns config file with the stored contents."""
@@ -126,7 +118,6 @@ class JujuDnsCharm(ops.CharmBase):
             controllers=self.controllers,
             ttl=self._stored.ttl
         )
-        logger.info("Rendered config:\n%s", config)
 
         with open(JUJU_DNS_PLUGIN_CONFIG_PATH, "w") as file:
             file.write(config)
@@ -144,7 +135,6 @@ class JujuDnsCharm(ops.CharmBase):
         corefile = template.render(
             port=self._stored.port
         )
-        logger.info("Rendered Corefile:\n%s", corefile)
 
         with open(COREFILE_PATH, "w") as file:
             file.write(corefile)

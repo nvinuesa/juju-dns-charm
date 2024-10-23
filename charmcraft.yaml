@@ -8,9 +8,13 @@ bases:
   - build-on:
       - name: ubuntu
         channel: "22.04"
+        architectures: [amd64]
     run-on:
       - name: ubuntu
         channel: "22.04"
+        architectures:
+          - amd64
+          - arm64
 
 config:
   options:
@@ -25,12 +29,6 @@ config:
       default: "60"
       type: string
 
-resources:
-  controllers:
-    type: file
-    filename: controllers.yaml
-    description: Local controllers.yaml file for the juju client.
-  accounts:
-    type: file
-    filename: accounts.yaml
-    description: Local accounts.yaml file for the juju client. Needed to authenticate with the Juju controller.
+requires:
+  controller:
+    interface: juju_dns
